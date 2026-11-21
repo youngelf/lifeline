@@ -1,0 +1,30 @@
+[Unit]
+Description=Lifeline Wi-Fi-Aware Ethernet Router and DHCP Failover Daemon
+Documentation=file:///usr/share/doc/lifeline/README.md
+After=network-pre.target NetworkManager.service systemd-resolved.service systemd-networkd.service
+Wants=NetworkManager.service systemd-resolved.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/lifelined --config /etc/lifeline/config.toml
+ExecReload=/bin/kill -HUP $MAINPID
+# Safety net: even if the daemon crashes or is SIGKILLed, clean up dnsmasq,
+# nftables table, policy routing table 200, and restore sysctls/resolved DNS.
+ExecStopPost=/usr/bin/lifelinectl --config /etc/lifeline/config.toml cleanup
+
+# Crucial: keep `dnsmasq` inside this unit's cgroup and kill the whole cgroup
+# if the service stops or fails, preventing orphaned DHCP servers.
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+Restart=always
+RestartSec=3
+
+# Runtime directory for dnsmasq.conf, dnsmasq.leases, status.json, control socket
+RuntimeDirectory=lifeline
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

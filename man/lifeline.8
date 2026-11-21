@@ -1,0 +1,167 @@
+.TH LIFELINE 8 "2026-11-20" "lifeline 0.1.0" "System Administration"
+.SH NAME
+lifeline \- Wi-Fi-aware Ethernet DHCP router and failover service
+.SH DESCRIPTION
+.B lifeline
+manages the Ethernet interface on a laptop with Wi-Fi and Ethernet so it acts
+either as a local DHCP/NAT gateway or as a failover DHCP client:
+.TP
+.B PRIMARY
+Wi-Fi is healthy and no other DHCP server is active on Ethernet. Ethernet uses
+its static address from config, serves DHCPv4/SLAAC/DHCPv6/DNS from
+.I /etc/lifeline/dhcp_hosts.csv
+(plus an optional fallback
+.I dynamic_pool
+if configured), and forwards IPv4/IPv6 traffic over Wi-Fi and active VPN/tunnel
+interfaces (such as Tailscale or VMware tunnels) for active DHCP clients only.
+.TP
+.B SECONDARY
+Wi-Fi is healthy, but another DHCP server (router or another lifeline laptop)
+is already active on Ethernet. This laptop remains on standby using Wi-Fi and
+promotes only if the primary server disappears.
+.TP
+.B FAILOVER
+Wi-Fi connectivity failed. DHCP serving and Ethernet forwarding stop, and
+Ethernet requests an IP, gateway, and DNS via DHCP.
+.TP
+.B ELECTION
+Wi-Fi is healthy and no primary DHCP server was found; waiting a brief
+priority, Wi-Fi probe latency, and MAC-ordered delay before promoting to
+.BR PRIMARY .
+.TP
+.B IDLE
+Ethernet link carrier is down (cable unplugged).
+.SH SERVICE CONTROL
+.TP
+.B sudo systemctl start lifeline
+Start the service.
+.TP
+.B sudo systemctl stop lifeline
+Stop the service, halt DHCP serving, and restore Ethernet/firewall state.
+.TP
+.B sudo systemctl restart lifeline
+Restart the daemon (required after changing interfaces or daemon settings).
+.TP
+.B sudo systemctl reload lifeline
+Hot-reload
+.I config.toml
+and
+.I dhcp_hosts.csv
+without restarting the service.
+.TP
+.B sudo systemctl enable \-\-now lifeline
+Enable at boot and start immediately.
+.SH CHECKING STATUS AND SERVED CLIENTS
+.TP
+.B sudo lifelinectl status
+Shows the current mode, reason, detected interfaces, active uplinks (Wi-Fi/VPN),
+Wi-Fi probe RTT, other lifeline peers on the switch, and all active DHCP
+client leases.
+.TP
+.B lifelinectl prompt [\-\-bash|\-\-zsh] [\-\-color]
+Prints a compact badge (for example
+.BR [LL:PRI(2)] )
+for shell
+.B PS1
+prompts without requiring root. On desktop sessions,
+.B lifeline-tray
+also provides a menu-bar indicator and mode-change notifications.
+.TP
+.B sudo nft list table inet lifeline
+Shows which client IP/MAC pairs are currently allowed to forward traffic.
+.TP
+.B cat /run/lifeline/dnsmasq.leases
+Lists current DHCP leases issued when in
+.B PRIMARY
+mode.
+.SH LOGS AND DEBUGGING
+Lifeline logs to
+.BR systemd-journald
+(and
+.I /var/log/syslog
+if
+.B rsyslog
+is installed).
+.TP
+.B journalctl -u lifeline
+Show full daemon log history.
+.TP
+.B journalctl -u lifeline | grep Transitioning
+List every mode change and why it happened.
+.TP
+.B journalctl -u lifeline -f
+Follow mode changes and probe events in real time.
+.TP
+.B journalctl -t dnsmasq
+View DHCP server requests, offers, and lease assignments.
+.PP
+To enable verbose debug logging temporarily:
+.RS
+.EX
+sudo systemctl edit lifeline
+# Add under [Service]:
+#   Environment=LIFELINE_LOG_LEVEL=DEBUG
+sudo systemctl restart lifeline
+.EE
+.RE
+.PP
+Common checks when DHCP is not being served:
+.IP \(bu 2
+.B Mode is SECONDARY:
+Check
+.I ext_dhcp
+and
+.I peers
+in
+.B lifelinectl status
+to see which router or peer laptop owns the segment.
+.IP \(bu 2
+.B Mode is FAILOVER:
+Check
+.I Wi-Fi Health
+in
+.B lifelinectl status
+and
+.BR journalctl\ -u\ lifeline .
+.IP \(bu 2
+.B Client gets no IP in PRIMARY:
+Verify the client MAC is listed in
+.I /etc/lifeline/dhcp_hosts.csv
+and run
+.BR sudo\ lifelinectl\ validate .
+.SH FILES
+.TP
+.I /etc/lifeline/config.toml
+Main configuration file.
+.TP
+.I /etc/lifeline/config.env
+Optional environment overrides (for example
+.BR ETH_IP ).
+.TP
+.I /etc/lifeline/dhcp_hosts.csv
+Static hardware-MAC-to-IP table.
+.TP
+.I /etc/lifeline/hosts.d/*.csv
+Optional drop-in MAC-to-IP tables.
+.TP
+.I /run/lifeline/status.json
+Live status snapshot updated every second.
+.SH AUTHOR
+Vikram Aggarwal
+.SH REPORTING BUGS AND CONTRIBUTING
+Bug fixes, hardware-compatibility notes, and feature improvements are warmly
+encouraged. When reporting an issue, include output from
+.B sudo lifelinectl status \-\-json
+and
+.BR journalctl\ -u\ lifeline\ -b .
+.SH COPYRIGHT
+Copyright \(co 2026 Vikram Aggarwal.
+License GPLv3+: GNU General Public License version 3 or later.
+See
+.I /usr/share/doc/lifeline/LICENSE
+for the full license text.
+.SH SEE ALSO
+.BR lifelinectl (8),
+.BR lifelined (8),
+.BR journalctl (1),
+.BR systemctl (1)

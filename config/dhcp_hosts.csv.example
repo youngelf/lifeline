@@ -1,0 +1,23 @@
+# ==============================================================================
+# Lifeline Static Hardware-to-IP Table (/etc/lifeline/dhcp_hosts.csv)
+# ==============================================================================
+# Format:
+#   mac,ipv4,hostname,ipv6_host
+#
+# Fields:
+#   mac       : Client Ethernet MAC address (aa:bb:cc:dd:ee:ff, case-insensitive)
+#   ipv4      : Static IPv4 address inside [lan].eth_ip's subnet (must != eth_ip)
+#   hostname  : Optional DNS hostname registered in dnsmasq (may be blank)
+#   ipv6_host : Optional IPv6 host suffix inside [lan].eth_ipv6_prefix (e.g.
+#               "::101"). If blank, defaults to "::<last_ipv4_octet>" so
+#               192.168.9.101 automatically maps to <ULA_PREFIX>::101.
+#
+# Tip for multi-laptop setups (up to 5 laptops sharing one switch):
+#   If you ALSO want a laptop whose Wi-Fi fails (FAILOVER mode) to receive an
+#   address from whichever laptop is currently PRIMARY, list all laptops'
+#   Ethernet MACs in this table alongside your client devices!
+# ==============================================================================
+
+aa:bb:cc:dd:ee:01,192.168.9.101,device-alpha,
+aa:bb:cc:dd:ee:02,192.168.9.102,device-beta,::102
+aa:bb:cc:dd:ee:03,192.168.9.103,sensor-rig,

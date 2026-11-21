@@ -1,0 +1,328 @@
+# ==============================================================================
+# Lifeline Configuration File (/etc/lifeline/config.toml)
+# ==============================================================================
+#
+# Lifeline turns an Ubuntu 26.04 x64 laptop with both Wi-Fi and Ethernet into a
+# fail-safe, self-coordinating gateway on a shared Ethernet cable/switch:
+#
+#   * PRIMARY mode   : Wi-Fi is healthy AND no other DHCP server owns the wire.
+#                      Ethernet gets static `eth_ip` (e.g. 192.168.9.24/24) plus
+#                      an IPv6 ULA address, starts `dnsmasq` using the MAC->IP
+#                      table, and forwards+NATs IPv4 & IPv6 ONLY for clients
+#                      holding an active DHCP lease.
+#
+#   * SECONDARY mode : Wi-Fi is healthy, BUT another DHCP server is active on
+#                      Ethernet (either an upstream hardware router OR another
+#                      lifeline laptop already acting as PRIMARY). This laptop
+#                      stays standby: no DHCP server, no forwarding, keeps using
+#                      Wi-Fi for internet/DNS, and monitors the primary server.
+#                      If the primary disappears, up to 5 lifeline laptops hold
+#                      a deterministic election so only ONE promotes to PRIMARY.
+#
+#   * FAILOVER mode  : Wi-Fi has failed. Lifeline stops any DHCP server, blocks
+#                      all Ethernet forwarding/NAT, configures Ethernet via DHCP
+#                      client, and uses the upstream DHCP gateway & DNS.
+#                      Meanwhile it keeps probing Wi-Fi through Wi-Fi itself
+#                      (policy routing table + SO_BINDTODEVICE) to detect recovery.
+#
+#   * IDLE mode      : Ethernet cable is unplugged (NO-CARRIER). DHCP server and
+#                      Ethernet forwarding remain stopped.
+#
+# Optional per-machine override file:
+#   If /etc/lifeline/config.env exists, variables such as ETH_IP=192.168.9.24
+#   override `[lan].eth_ip` (handy for minimal Ansible / cloud-init templates).
+# ==============================================================================
+
+
+[interfaces]
+# Network interface selection for Ethernet and Wi-Fi.
+#
+# Allowed values for both `eth` and `wifi`:
+#   "auto"                - Auto-discover the physical NIC via the active
+#                           backend (NetworkManager / systemd-networkd / sysfs).
+#                           Virtual interfaces (docker0, veth*, virbr0, wg*,
+#                           tailscale0) are automatically ignored.
+#                           If multiple physical Ethernet NICs exist (e.g., an
+#                           onboard NIC plus a USB-C dongle), the one with
+#                           carrier UP is preferred, or you can pin by MAC.
+#   "<ifname>"            - Explicit Linux interface name, e.g. "enp0s31f6" or
+#                           "wlp0s20f3". Useful when interface names are fixed.
+#   "mac:aa:bb:cc:dd:ee:ff"
+#                         - Pin to a specific hardware MAC address (recommended
+#                           when using USB-C Ethernet dongles or multi-NIC boxes
+#                           because kernel interface names can change).
+eth = "auto"
+wifi = "auto"
+
+# Network configuration backend used to configure interfaces and DNS:
+#   "auto" (default)      - Automatically chooses NetworkManager if active and
+#                           managing interfaces, else systemd-networkd if active.
+#   "networkmanager"      - Ubuntu 26.04 Desktop default. Uses temporary
+#                           in-memory nmcli connection profiles so `/etc/netplan`
+#                           is never polluted with stale YAML files, and uses
+#                           `resolvectl` to manage systemd-resolved DNS routing.
+#   "networkd"            - Ubuntu 26.04 Server / headless systems using
+#                           systemd-networkd instead of NetworkManager.
+backend = "auto"
+
+
+[lan]
+# Hardcoded static IPv4 address and prefix length assigned to the Ethernet
+# interface when this laptop is in PRIMARY mode.
+#
+# Format: CIDR notation "A.B.C.D/PREFIX" (e.g. "192.168.9.24/24").
+# If you specify a bare IP without "/PREFIX" (e.g. "192.168.9.24" or via
+# ETH_IP in config.env), "/24" is assumed.
+#
+# Validation rules enforced at startup/reload:
+#   - Prefix length must be between /8 and /30.
+#   - Address must NOT be the subnet network address (.0) or broadcast (.255).
+eth_ip = "192.168.9.24/24"
+
+# IPv6 Unique Local Address (ULA) /64 prefix used on the Ethernet LAN in PRIMARY
+# mode (NAT66 translates client ULA traffic onto whatever IPv6 address Wi-Fi has).
+#
+# Why ULA + NAT66 instead of prefix delegation?
+#   Wi-Fi access points almost never support DHCPv6 Prefix Delegation (PD), and
+#   often assign only a /64 SLAAC or single /128 address. A local ULA /64 works
+#   on 100% of Wi-Fi networks and keeps client IPv6 addresses stable as the
+#   laptop roams between Wi-Fi networks.
+#
+# Leave empty ("") to auto-derive a deterministic RFC 4193 ULA prefix from
+# `/etc/machine-id` (recommended for multi-machine deployments so each laptop
+# gets a stable, globally-unlikely-to-collide `fdXX:XXXX:XXXX::/64` prefix).
+# Or set an explicit ULA /64 such as "fd09:1234:5678::/64" if all laptops
+# should advertise the exact same LAN IPv6 prefix during failover.
+eth_ipv6_prefix = ""
+
+# Host identifier (interface suffix) assigned to THIS laptop inside
+# `eth_ipv6_prefix` when in PRIMARY mode.
+# Default "::24" pairs nicely with `192.168.9.24`. Must start with "::".
+eth_ipv6_host = "::24"
+
+
+[dhcp]
+# Path to the CSV file mapping Ethernet client hardware MAC addresses to static
+# IPv4 (and optional IPv6 host ID / hostname) assignments.
+# Only clients listed here receive DHCP leases by default.
+hosts_file = "/etc/lifeline/dhcp_hosts.csv"
+
+# Optional directory of additional `*.csv` files merged after `hosts_file`
+# (useful when deploying a shared fleet table plus per-rack overrides).
+# Leave empty ("") to disable drop-in loading.
+hosts_dir = "/etc/lifeline/hosts.d"
+
+# DHCP lease duration offered to Ethernet clients in PRIMARY mode.
+# Keep this relatively short (5m-15m) so that if Wi-Fi fails and an upstream
+# router takes over (or another laptop promotes), clients renew quickly and
+# pick up the new state without waiting hours.
+# Accepts dnsmasq duration syntax: e.g. "10m", "300s", "1h".
+lease_time = "10m"
+
+# Whether dnsmasq sets `dhcp-authoritative`.
+#   false (recommended) : Stay silent to DHCPREQUESTs from unknown MACs or foreign
+#                         subnets. Prevents sending disruptive DHCPNAK packets if
+#                         an external router shares the switch.
+#   true                : Aggressively NAK unknown leases on the segment for
+#                         faster client rebinding on an isolated switch.
+authoritative = false
+
+# Optional fallback dynamic DHCP pool for unspecified/unknown Ethernet machines.
+#   - When BOTH are empty (""), ONLY MACs listed in `dhcp_hosts.csv` receive IP
+#     addresses; unknown devices are ignored.
+#   - When BOTH are set (e.g. "192.168.9.200" and "192.168.9.240"), static
+#     entries in `dhcp_hosts.csv` still receive their reserved IPs, while any
+#     unspecified device gets a lease from this pool and is allowed to reach the
+#     internet through active_leases forwarding (local SSH/services remain open).
+#   - Must lie inside [lan].eth_ip's subnet and must NOT overlap eth_ip or any
+#     static host entry in `dhcp_hosts.csv`.
+dynamic_pool_start = ""
+dynamic_pool_end = ""
+
+# Path to the dnsmasq runtime lease database & config directory.
+# Should stay under /run/lifeline (tmpfs, auto-cleaned on reboot).
+runtime_dir = "/run/lifeline"
+
+# Path to the dnsmasq --dhcp-script hook binary that updates nftables sets on
+# every lease add/old/del event.
+# Leave empty ("") to auto-detect `/usr/libexec/lifeline/lease-hook` (.deb)
+# or `/usr/local/libexec/lifeline-lease-hook` (install.sh).
+lease_hook = ""
+
+
+[forwarding]
+# Controls which Ethernet devices are permitted to forward IPv4/IPv6 traffic
+# through the laptop to Wi-Fi when in PRIMARY mode.
+#
+#   "active_leases" (required/default):
+#       ONLY machines currently holding an active DHCP lease in dnsmasq are
+#       allowed through the nftables forward chain. IPv4 traffic is matched by
+#       BOTH source IP AND source MAC (`ip saddr . ether saddr`) to prevent IP
+#       spoofing; IPv6 traffic is matched by source MAC within the ULA prefix
+#       (supporting both DHCPv6 and SLAAC/privacy-extension clients).
+#   "static_table":
+#       Allows any MAC+IP listed in dhcp_hosts.csv even without a lease.
+#   "subnet":
+#       Allows the entire Ethernet LAN subnet.
+policy = "active_leases"
+
+# IPv6 forwarding/sharing mode on Ethernet when in PRIMARY mode:
+#   "ula_nat66" (recommended) : Advertise ULA /64 via RA + DHCPv6 and masquerade
+#                               outbound IPv6 onto Wi-Fi. Works on all Wi-Fi
+#                               networks (and disables RA default-router lifetime
+#                               automatically if Wi-Fi has IPv4 only).
+#   "off"                     : Disable IPv6 forwarding and RAs on Ethernet.
+ipv6_mode = "ula_nat66"
+
+# How lifeline selects outbound uplink interface(s) when forwarding Ethernet
+# client traffic in PRIMARY mode (helps when VPN/tunnel software like Tailscale,
+# WireGuard, OpenVPN, or VMware Tunnel is active over Wi-Fi):
+#   "auto_tunnel" (default) : Allows Wi-Fi PLUS the kernel's active internet
+#                             egress interface (resolving Tailscale table 52 /
+#                             WireGuard / tun / vmnet routes) and any UP tunnel
+#                             interfaces matching `tunnel_prefixes`.
+#   "wifi_only"             : Allows forwarding only directly out of the Wi-Fi
+#                             interface.
+#   "explicit"              : Allows forwarding only out of `uplink_interfaces`.
+uplink_mode = "auto_tunnel"
+
+# Explicit extra (or sole, when uplink_mode = "explicit") uplink interface names,
+# e.g. ["tailscale0", "tun0"].
+uplink_interfaces = []
+
+# Interface name prefixes automatically treated as active VPN/tunnel uplinks
+# when uplink_mode = "auto_tunnel".
+tunnel_prefixes = ["tailscale", "tun", "tap", "wg", "ppp", "vpn", "cscotun", "vmnet"]
+
+# Name of the dedicated nftables `inet` table managed atomically by lifeline.
+# All forwarding and NAT rules live inside this single table so host firewall
+# rules (e.g. Docker, ufw) are never overwritten.
+nft_table = "lifeline"
+
+# If `ufw` (Uncomplicated Firewall) is active on the host, automatically add
+# scoped allow rules for Ethernet DHCP/DNS/beacons/forwarding in PRIMARY mode
+# and remove them cleanly on exit or failover.
+manage_ufw = true
+
+
+[health]
+# How lifeline decides whether Wi-Fi currently has working connectivity.
+#
+# IMPORTANT: All probes are explicitly bound to the Wi-Fi interface using
+# SO_BINDTODEVICE AND a dedicated Linux policy routing table (`probe_table_id`)
+# keyed on Wi-Fi's source IP. This guarantees probes NEVER leak out over
+# Ethernet—even in FAILOVER mode when Ethernet holds the default route—and
+# return packets pass strict `rp_filter=1` checks.
+#
+#   "internet" (default) : Probes succeed if ANY target in `ipv4_targets` or
+#                          `ipv6_targets` answers on Wi-Fi (TCP connect to port
+#                          443/53, falling back across targets).
+#   "gateway"            : Probes only the Wi-Fi default gateway (useful on
+#                          air-gapped intranets without public internet).
+mode = "internet"
+
+# Public IPv4 endpoints probed over Wi-Fi (TCP port 443). Any single reachable
+# target marks IPv4 Wi-Fi connectivity healthy.
+ipv4_targets = ["1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"]
+
+# Public IPv6 endpoints probed over Wi-Fi when Wi-Fi has a global IPv6 address
+# and default IPv6 route. (Note: Wi-Fi is still considered healthy if IPv4 works
+# and Wi-Fi is IPv4-only; in that case IPv6 RA router lifetime is set to 0.)
+ipv6_targets = ["[2606:4700:4700::1111]:443", "[2001:4860:4860::8888]:443"]
+
+# Seconds between consecutive Wi-Fi health checks.
+probe_interval_sec = 3.0
+
+# Per-target socket connect timeout in seconds.
+probe_timeout_sec = 2.0
+
+# Number of consecutive failed Wi-Fi probes required while in PRIMARY or
+# SECONDARY mode before declaring Wi-Fi dead and switching to FAILOVER mode.
+# (3 * 3s = ~9s failover time; prevents switching on a 1-second packet drop.)
+fail_threshold = 3
+
+# Number of consecutive successful Wi-Fi-bound probes required while in FAILOVER
+# mode before declaring Wi-Fi recovered.
+# (4 * 3s = ~12s recovery confirmation; prevents flapping on flaky Wi-Fi.)
+recover_threshold = 4
+
+# Minimum seconds to stay in a newly entered mode (PRIMARY/SECONDARY/FAILOVER)
+# before another non-emergency transition is allowed (anti-flapping cooldown).
+min_dwell_sec = 15.0
+
+# Seconds after laptop resume from suspend (systemd-logind PrepareForSleep)
+# during which Wi-Fi failure transitions are paused so wpa_supplicant/NM has
+# time to re-associate without prematurely failing over.
+resume_grace_sec = 10.0
+
+# Dedicated Linux policy routing table ID & ip rule priority used solely for
+# Wi-Fi-bound health probes. Priority 4000 runs BEFORE Tailscale (5210-5270)
+# and main (32766) so Wi-Fi probes always bypass active VPN tunnels and Ethernet.
+probe_table_id = 200
+probe_rule_priority = 4000
+
+
+[election]
+# Coordination settings for shared Ethernet segments with up to 5+ lifeline
+# laptops AND/OR an external upstream DHCP server on the same plug.
+
+# How often (seconds) to broadcast a tiny `lifeline` presence beacon over
+# Ethernet link-local IPv6 multicast (`ff02::1`) when Ethernet carrier is UP.
+beacon_interval_sec = 1.0
+
+# UDP port for link-local IPv6 multicast coordination beacons.
+beacon_port = 41924
+
+# Seconds without hearing a PRIMARY peer's beacon before declaring that peer
+# offline (triggers DHCP re-check and deterministic promotion election).
+peer_timeout_sec = 4.0
+
+# How often (seconds) a SECONDARY node sends a raw AF_PACKET `DHCPDISCOVER`
+# probe on Ethernet to check whether ANY DHCP server (external hardware router
+# OR another lifeline laptop) is actively responding on the wire.
+dhcp_probe_interval_sec = 5.0
+
+# Timeout (seconds) to wait for a `DHCPOFFER` reply to each `DHCPDISCOVER`.
+dhcp_probe_timeout_sec = 1.5
+
+# Number of consecutive missed DHCP + beacon checks in SECONDARY mode before
+# concluding the primary DHCP server is inactive and entering promotion.
+primary_miss_threshold = 2
+
+# Explicit election priority for this laptop (lower number = higher preference
+# to become PRIMARY when multiple Wi-Fi-healthy laptops share a switch).
+# Equal priorities are broken FIRST by Wi-Fi probe connection latency bucket
+# (`latency_bucket_ms`), and then deterministically by ascending Ethernet MAC.
+priority = 100
+
+# Latency bucket width in milliseconds used when breaking election ties among
+# equal-priority laptops (for example, 20.0 ms groups 15ms and 19ms together so
+# minor jitter doesn't flip rankings, while 20ms beats 85ms cleanly).
+latency_bucket_ms = 20.0
+
+# Base backoff step (seconds) per election rank when promoting from SECONDARY
+# to PRIMARY. Rank 0 waits 0.5s, Rank 1 waits 2.5s, Rank 2 waits 4.5s, etc.
+# Prevents split-brain if multiple laptops detect primary failure at once.
+rank_backoff_sec = 2.0
+
+# If true, even when this laptop is already PRIMARY, periodically probe for a
+# newly connected *external* (non-lifeline) DHCP server on Ethernet and yield
+# to SECONDARY mode if one appears.
+yield_to_external_dhcp = true
+
+# Interval (seconds) for the external-DHCP check while already in PRIMARY mode.
+external_dhcp_check_interval_sec = 15.0
+
+# Run an ARP duplicate-address probe (RFC 5227) for `eth_ip` before claiming
+# PRIMARY mode. Aborts promotion if another host already owns `eth_ip`.
+arp_conflict_check = true
+
+
+[routing]
+# Route metric assigned to Ethernet in FAILOVER mode (must be LOWER than Wi-Fi's
+# typical metric of 600 so Ethernet becomes the active default gateway).
+failover_eth_metric = 100
+
+# Route metric assigned to Ethernet in SECONDARY mode (must be HIGHER than
+# Wi-Fi's metric of 600; combined with never-default=yes, Wi-Fi stays active).
+standby_eth_metric = 800

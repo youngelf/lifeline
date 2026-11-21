@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Vikram Aggarwal
+# Author: Vikram Aggarwal
+# Bug fixes, hardening, and feature improvements are warmly encouraged.
+
+# Wrapper invoked by dnsmasq --dhcp-script.
+# Sets PYTHONPATH if lifeline was installed into /opt/lifeline/src.
+if [ -d /opt/lifeline/src ]; then
+    PYTHONPATH="/opt/lifeline/src${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+fi
+exec /usr/bin/python3 -m lifeline.lease_hook "$@"

@@ -1,0 +1,73 @@
+.TH LIFELINED 8 "2026-11-20" "lifeline 0.1.0" "System Administration"
+.SH NAME
+lifelined \- lifeline background service daemon
+.SH SYNOPSIS
+.B lifelined
+.RB [ \-\-config
+.IR PATH ]
+.RB [ \-\-log\-level
+.IR LEVEL ]
+.SH DESCRIPTION
+.B lifelined
+is the system daemon started by
+.I lifeline.service
+to monitor Wi-Fi connectivity, coordinate with other DHCP servers on
+Ethernet, and manage Ethernet addressing,
+.BR dnsmasq ,
+and forwarding rules. Most operators should manage it via
+.BR systemctl (1)
+and
+.BR lifelinectl (8)
+rather than invoking it directly.
+.SH OPTIONS
+.TP
+.BI \-\-config " PATH"
+Path to configuration file (default:
+.IR /etc/lifeline/config.toml ).
+.TP
+.BI \-\-log\-level " LEVEL"
+Set log verbosity to
+.BR DEBUG ,
+.BR INFO " (default),"
+.BR WARNING ,
+or
+.BR ERROR .
+.SH SIGNALS
+.TP
+.B SIGHUP
+Reload configuration and the MAC-to-IP table.
+.TP
+.B SIGTERM, SIGINT
+Stop serving DHCP, block Ethernet forwarding, and restore system settings.
+.SH ENVIRONMENT
+.TP
+.B LIFELINE_LOG_LEVEL
+Default log level when
+.B \-\-log\-level
+is not passed on the command line.
+.SH LOGS
+Logs are written to standard error and captured by
+.BR systemd-journald .
+Inspect them with:
+.RS
+.EX
+journalctl -u lifeline -f
+.EE
+.RE
+.SH AUTHOR
+Vikram Aggarwal
+.SH REPORTING BUGS AND CONTRIBUTING
+Bug fixes and feature improvements are warmly encouraged. Include
+.B journalctl -u lifeline -b
+and
+.B lifelinectl status \-\-json
+when reporting issues or proposing enhancements.
+.SH COPYRIGHT
+Copyright \(co 2026 Vikram Aggarwal.
+License GPLv3+: GNU General Public License version 3 or later
+.RI ( /usr/share/doc/lifeline/LICENSE ).
+.SH SEE ALSO
+.BR lifeline (8),
+.BR lifelinectl (8),
+.BR journalctl (1),
+.BR systemctl (1)

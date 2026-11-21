@@ -1,0 +1,53 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Ensure drop-in host table directory exists
+        mkdir -p /etc/lifeline/hosts.d
+
+        # Byte-compile Python modules for the installed interpreter
+        if command -v py3compile >/dev/null 2>&1; then
+            py3compile -p lifeline /usr/lib/python3/dist-packages/lifeline || true
+        else
+            python3 -m compileall -q /usr/lib/python3/dist-packages/lifeline || true
+        fi
+
+        # Reload AppArmor profile for dnsmasq so /run/lifeline and lease-hook are permitted
+        if [ -f /etc/apparmor.d/usr.sbin.dnsmasq ] && command -v apparmor_parser >/dev/null 2>&1; then
+            if [ -d /sys/kernel/security/apparmor ]; then
+                apparmor_parser -r -T -W /etc/apparmor.d/usr.sbin.dnsmasq || true
+            fi
+        fi
+
+        # Register and enable systemd service when systemd is PID 1
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            systemctl enable lifeline.service || true
+
+            # On upgrade ($2 is previous version), restart if it was active before prerm stopped it.
+            # On fresh install, validate config and prompt operator before touching live NICs.
+            if [ -n "$2" ]; then
+                if [ -f /run/lifeline-upgrade-restart ]; then
+                    rm -f /run/lifeline-upgrade-restart
+                    systemctl start lifeline.service || true
+                else
+                    systemctl try-restart lifeline.service || true
+                fi
+            else
+                echo "lifeline installed and enabled (lifeline.service)."
+                echo "Edit /etc/lifeline/config.toml (or /etc/lifeline/config.env) and"
+                echo "/etc/lifeline/dhcp_hosts.csv, then run:"
+                echo "  sudo lifelinectl validate && sudo systemctl start lifeline"
+            fi
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

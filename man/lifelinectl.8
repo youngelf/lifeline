@@ -1,0 +1,99 @@
+.TH LIFELINECTL 8 "2026-11-20" "lifeline 0.1.0" "System Administration"
+.SH NAME
+lifelinectl \- inspect and control the lifeline service
+.SH SYNOPSIS
+.B lifelinectl
+.RB [ \-\-config
+.IR PATH ]
+.I COMMAND
+.RI [ ARGS ]
+.SH DESCRIPTION
+.B lifelinectl
+queries, validates, reloads, and overrides the running
+.BR lifeline (8)
+daemon.
+.SH OPTIONS
+.TP
+.BI \-\-config " PATH"
+Path to configuration file (default:
+.IR /etc/lifeline/config.toml ).
+.SH COMMANDS
+.TP
+.B status [\-\-json]
+Display the current mode, reason, Ethernet/Wi-Fi interfaces, Wi-Fi health,
+external DHCP / peer election state, and active DHCP client leases. Pass
+.B \-\-json
+for machine-readable output.
+.TP
+.B validate
+Check
+.IR config.toml ,
+.IR config.env ,
+and
+.I dhcp_hosts.csv
+for syntax or IP/MAC conflicts before starting or reloading.
+.TP
+.B doctor
+Print a diagnostic report covering config validation, binaries, systemd network
+services, NetworkManager managed/unmanaged device states, dnsmasq test output,
+nftables tables, and recent journal entries.
+.TP
+.B reload
+Hot-reload configuration and the MAC-to-IP table in the running daemon.
+.TP
+.B force\-mode {primary|secondary|failover|auto}
+Force a specific mode for testing or maintenance, or return to
+.B auto
+control.
+.TP
+.B prompt [\-\-shell {plain|bash|zsh}] [\-\-color] [\-\-show-stopped]
+Print a compact status badge for shell
+.B PS1
+/
+.B PROMPT
+integration by reading
+.I /run/lifeline/status.json
+directly (no root privileges required).
+.TP
+.B cleanup
+Remove runtime firewall rules, policy routes, stale dnsmasq processes, and
+temporary NetworkManager profiles. Used automatically by systemd on stop.
+.SH EXAMPLES
+.TP
+Check if DHCP is active and which clients hold leases:
+.B sudo lifelinectl status
+.TP
+Validate edited host entries and apply them live:
+.B sudo lifelinectl validate && sudo lifelinectl reload
+.TP
+Force failover mode for testing, then restore automatic mode:
+.B sudo lifelinectl force\-mode failover
+.br
+.B sudo lifelinectl force\-mode auto
+.SH EXIT STATUS
+Returns 0 on success, 1 if the daemon is unreachable or a control command
+fails, and 2 on invalid configuration.
+.SH FILES
+.TP
+.I /etc/lifeline/config.toml
+Default configuration file.
+.TP
+.I /run/lifeline/control.sock
+Control socket used to talk to
+.BR lifelined (8).
+.SH AUTHOR
+Vikram Aggarwal
+.SH REPORTING BUGS AND CONTRIBUTING
+Bug fixes and feature improvements are warmly encouraged. Include
+.B lifelinectl status \-\-json
+and
+.B journalctl -u lifeline
+output when filing issues or submitting patches.
+.SH COPYRIGHT
+Copyright \(co 2026 Vikram Aggarwal.
+License GPLv3+: GNU General Public License version 3 or later
+.RI ( /usr/share/doc/lifeline/LICENSE ).
+.SH SEE ALSO
+.BR lifeline (8),
+.BR lifelined (8),
+.BR journalctl (1)

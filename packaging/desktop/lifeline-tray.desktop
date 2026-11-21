@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lifeline Status Tray
+Comment=Monitor Lifeline Wi-Fi/Ethernet DHCP failover status
+Exec=/usr/bin/lifeline-tray
+Icon=lifeline-primary
+Terminal=false
+Categories=Network;System;
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=GNOME;Ubuntu;XFCE;KDE;MATE;LXQt;Cinnamon;

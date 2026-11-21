@@ -1,0 +1,5 @@
+/etc/lifeline/config.toml
+/etc/lifeline/config.env
+/etc/lifeline/dhcp_hosts.csv
+/etc/apparmor.d/local/usr.sbin.dnsmasq
+/etc/xdg/autostart/lifeline-tray.desktop

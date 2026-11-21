@@ -1,0 +1,22 @@
+Package: lifeline
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: all
+Maintainer: Vikram Aggarwal <vikram@localhost>
+Depends: python3 (>= 3.12), dnsmasq-base, nftables, iproute2, network-manager
+Recommends: systemd-resolved
+Suggests: python3-gi, gir1.2-ayatanaappindicatorglib-2.0, libnotify-bin
+Description: Wi-Fi-aware Ethernet DHCP router and automatic failover daemon
+ Lifeline turns a Linux laptop with Wi-Fi and Ethernet into a fail-safe,
+ self-coordinating gateway on a shared Ethernet cable or switch:
+  * PRIMARY mode: when Wi-Fi is healthy and no other DHCP server owns the
+    wire, configures Ethernet with a static IP, starts dnsmasq using a
+    hardware-MAC-to-IP table, and enables IPv4/IPv6 NAT + forwarding only
+    for active DHCP clients.
+  * SECONDARY mode: when Wi-Fi is healthy and another DHCP server (external
+    router or another lifeline laptop) is active, stays in standby and
+    promotes via deterministic election if the primary disappears.
+  * FAILOVER mode: when Wi-Fi fails, stops DHCP serving, blocks Ethernet
+    forwarding, configures Ethernet via DHCP client (gateway + DNS), and
+    probes Wi-Fi via a dedicated policy routing table until recovery.

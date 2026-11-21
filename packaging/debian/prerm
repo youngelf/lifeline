@@ -1,0 +1,46 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop lifeline.service || true
+            if [ "$1" = "remove" ]; then
+                systemctl disable lifeline.service || true
+            fi
+        fi
+
+        # Ensure nftables table, policy routing table, and NM runtime profiles are cleaned up
+        if command -v lifelinectl >/dev/null 2>&1; then
+            lifelinectl cleanup >/dev/null 2>&1 || true
+        fi
+
+        if command -v py3clean >/dev/null 2>&1; then
+            py3clean -p lifeline || true
+        else
+            find /usr/lib/python3/dist-packages/lifeline -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+        fi
+        ;;
+    upgrade)
+        if [ -d /run/systemd/system ]; then
+            if systemctl is-active --quiet lifeline.service; then
+                touch /run/lifeline-upgrade-restart || true
+                systemctl stop lifeline.service || true
+            fi
+        fi
+        if command -v lifelinectl >/dev/null 2>&1; then
+            lifelinectl cleanup >/dev/null 2>&1 || true
+        fi
+        if command -v py3clean >/dev/null 2>&1; then
+            py3clean -p lifeline || true
+        fi
+        ;;
+    failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

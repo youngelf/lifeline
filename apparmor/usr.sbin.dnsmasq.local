@@ -1,0 +1,11 @@
+# AppArmor local override for Ubuntu's usr.sbin.dnsmasq profile.
+# Installed to /etc/apparmor.d/local/usr.sbin.dnsmasq so dnsmasq can read
+# lifeline's generated config, write leases/PID under /run/lifeline/, and
+# execute the lease-hook script without EACCES denials.
+
+/run/lifeline/ r,
+/run/lifeline/** rw,
+/usr/libexec/lifeline/lease-hook ixr,
+/usr/local/libexec/lifeline-lease-hook ixr,
+/usr/bin/python3* ixr,
+/usr/sbin/nft ixr,
