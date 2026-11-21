@@ -175,14 +175,14 @@ Because Lifeline is pure Python 3 stdlib, `./build_deb.sh` builds a single archi
 
 ```bash
 ./build_deb.sh
-# Creates dist/lifeline_0.1.0_all.deb
+# Creates dist/lifeline_0.15.0_all.deb
 ```
 
-Copy `dist/lifeline_0.1.0_all.deb` to any target machine and install it with `apt` (which automatically installs `python3`, `dnsmasq-base`, `nftables`, `iproute2`, and `network-manager`):
+Copy `dist/lifeline_0.15.0_all.deb` to any target machine and install it with `apt` (which automatically installs `python3`, `dnsmasq-base`, `nftables`, `iproute2`, and `network-manager`):
 
 ```bash
-scp dist/lifeline_0.1.0_all.deb user@laptop:/tmp/
-ssh user@laptop "sudo apt update && sudo apt install -y /tmp/lifeline_0.1.0_all.deb"
+scp dist/lifeline_0.15.0_all.deb user@laptop:/tmp/
+ssh user@laptop "sudo apt update && sudo apt install -y /tmp/lifeline_0.15.0_all.deb"
 ```
 
 ### Option B: Direct Install from Source

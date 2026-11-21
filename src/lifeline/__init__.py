@@ -11,7 +11,7 @@ external DHCP server share the same Ethernet switch, and automatic DHCP-client
 failover when Wi-Fi connectivity drops.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.15.0"
 __author__ = "Vikram Aggarwal"
 __license__ = "GPL-3.0-or-later"
 __all__ = ["__version__", "__author__", "__license__"]

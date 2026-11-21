@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lifeline"
-version = "0.1.0"
+version = "0.15.0"
 description = "Wi-Fi-aware Ethernet DHCP router / failover client daemon with multi-laptop standby election for Ubuntu 26.04"
 readme = "README.md"
 license = "GPL-3.0-or-later"

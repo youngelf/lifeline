@@ -19,6 +19,7 @@ import sys
 import time
 from typing import Optional
 
+from lifeline import __version__
 from lifeline.backends import (
     InterfacePair,
     NetworkBackend,
@@ -337,7 +338,7 @@ class LifelineDaemon:
         self.cfg.dhcp.runtime_dir.mkdir(parents=True, exist_ok=True)
         leases = parse_dnsmasq_leases(self.cfg.dhcp.runtime_dir / "dnsmasq.leases")
         payload = {
-            "version": "0.1.0",
+            "version": __version__,
             "node_id": self.node_id,
             "mode": self.sm.mode.value,
             "reason": self.sm.last_reason,

@@ -97,8 +97,10 @@ eth_ipv6_prefix = ""
 
 # Host identifier (interface suffix) assigned to THIS laptop inside
 # `eth_ipv6_prefix` when in PRIMARY mode.
-# Default "::24" pairs nicely with `192.168.9.24`. Must start with "::".
-eth_ipv6_host = "::24"
+# Leave commented out or "" (recommended) to automatically match the last octet
+# of `eth_ip` (for example, `192.168.9.10` -> `::10`, matching `dhcp_hosts.csv`).
+# Must start with "::" if specified explicitly.
+# eth_ipv6_host = "::24"
 
 
 [dhcp]

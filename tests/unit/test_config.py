@@ -161,6 +161,28 @@ dynamic_pool_end = "192.168.9.30"
             with self.assertRaises(ConfigError):
                 load_config(cfg_path, env_path=None)
 
+    def test_unspecified_eth_ipv6_host_follows_eth_ip_last_octet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hosts_csv = root / "dhcp_hosts.csv"
+            hosts_csv.write_text(
+                "00:1f:16:2e:d6:91,192.168.9.23,p23,\n"
+                "0c:4d:e9:99:51:4a,192.168.9.24,p24,\n",
+                encoding="utf-8",
+            )
+            cfg_path = root / "config.toml"
+            cfg_path.write_text(
+                f'[lan]\neth_ip = "192.168.9.10/24"\neth_ipv6_prefix = "fdd9:6034:1c31::/64"\n'
+                f'[dhcp]\nhosts_file = "{hosts_csv}"\n',
+                encoding="utf-8",
+            )
+            env_path = Path(__file__).resolve().parents[2] / "config" / "config.env.example"
+            cfg = load_config(cfg_path, env_path=env_path)
+            self.assertEqual(str(cfg.lan.eth_ip), "192.168.9.10/24")
+            self.assertEqual(str(cfg.lan.eth_ipv6_addr), "fdd9:6034:1c31::10/64")
+            self.assertEqual(len(cfg.hosts), 2)
+            self.assertEqual(str(cfg.hosts[1].ipv6), "fdd9:6034:1c31::24")
+
 
 if __name__ == "__main__":
     unittest.main()

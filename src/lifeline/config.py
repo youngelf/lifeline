@@ -416,7 +416,12 @@ def load_config(
     else:
         v6_prefix = derive_ula_prefix(machine_id_path)
 
-    v6_host_raw = str(lan_sec.get("eth_ipv6_host", "::24")).strip()
+    v6_host_raw = env_overrides.get(
+        "ETH_IPV6_HOST", str(lan_sec.get("eth_ipv6_host", ""))
+    ).strip()
+    if not v6_host_raw:
+        last_octet = int(eth_ip.ip) & 0xFF
+        v6_host_raw = f"::{last_octet if last_octet != 0 else 1}"
     v6_addr_only = combine_ipv6_prefix_and_host(v6_prefix, v6_host_raw)
     v6_iface = ipaddress.IPv6Interface(f"{v6_addr_only}/64")
     lan = LanConfig(eth_ip=eth_ip, eth_ipv6_prefix=v6_prefix, eth_ipv6_addr=v6_iface)
